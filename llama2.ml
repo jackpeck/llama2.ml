@@ -229,33 +229,31 @@ let tokenizer_init conf file =
   let vocab_scores = ref [] in
   let max_token_length = ref 0 in
 
-  (* let read_float count length =
-    let values = Array.make count 0 in
+  let read_float count =
+    let values = Array.make count 0.0 in
     for i = 0 to count - 1 do
       values.(i) <- input_binary_float file;
     done;
     values
-  in *)
+  in
   let read_int count =
     let values = Array.make count 0 in
     for i = 0 to count - 1 do
-      values.(i) <- input_binary_int file;
+      values.(i) <- (Int.shift_right (input_binary_int file) 24);
     done;
     values
   in
 
-  (* max_token_length := (read_int 1).(0); *)
-  (* max_token_length := 4; *)
-  (* max_token_length := input_binary_int file; *)
-  max_token_length := (Int.shift_right (input_binary_int file) 24);
-  (* print_endline (int32_to_bin (Int32.of_int(!max_token_length))); *)
-  (* print_endline (string_of_int (Int.shift_right !max_token_length 24)); *)
-  (* for _i = 0 to conf.vocab_size - 1 do
-    vocab_scores := (read_float 1 4).(0) :: !vocab_scores;
-    let len = (read_int 1 4).(0) in
-    let bstr = Bytes.to_string (read_float 1 len).(0) in
+  max_token_length := (read_int 1).(0);
+  for _i = 0 to conf.vocab_size - 1 do
+    vocab_scores := (read_float 1).(0) :: !vocab_scores;
+    let len = (read_int 1).(0) in
+    (* let bstr = Bytes.to_string (read_float len).(0) in *)
+    (* let bstr = Bytes.to_string (Bytes.create(5)) in *)
+    let bytes = Bytes.create len in
+    let bstr = really_input file bytes 0 len in
     vocab := bstr :: !vocab;
-  done; *)
+  done;
 
   (!vocab, List.rev !vocab_scores, !max_token_length)
 ;;
@@ -294,7 +292,9 @@ let run args =
   let tokenizer_file = open_in_bin "tokenizer.bin" in
   let vocab, vocab_scores, max_token_length = tokenizer_init config tokenizer_file in
   print_endline "filhuksdf";
-  print_endline (string_of_int max_token_length)
+  print_endline (string_of_int max_token_length);
+  print_endline (string_of_float (List.nth vocab_scores 0));
+  print_endline (string_of_float (List.nth vocab_scores 1000))
 
   (* print_endline checkpoint;
   let file_name = "tokenizer.bin" in
