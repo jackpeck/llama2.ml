@@ -106,28 +106,6 @@ type transformer_weights = {
   mutable rms_att_weight : float array;
 }
 
-(* let checkpoint_init_weights weights conf file shared_weights file_size =
-  (* let ic = open_in_bin checkpoint in *)
-  let read_floats count =
-    let buffer = Bytes.create (count * 4) in
-    let _ = input file buffer 0 (count * 4) in
-    let values = Array.init count (fun i ->
-      let offset = i * 4 in
-      let bytes = Bytes.sub buffer offset 4 in
-      let float_bits = 
-        Int32.logor (Int32.of_int (Char.code (Bytes.get bytes 0)))
-                    (Int32.shift_left (Int32.of_int (Char.code (Bytes.get bytes 1))) 8)
-      in
-      Int32.float_of_bits float_bits
-    ) in
-    values
-  in
-
-  weights.token_embedding_table <- read_floats (conf.vocab_size * conf.dim);
-  weights.rms_att_weight <- read_floats (conf.n_layers * conf.dim)
-;; *)
-
-
 (* https://discuss.ocaml.org/t/pretty-printing-binary-ints/9062/7 *)
 let int_size = Sys.word_size - 1
 let int2bin =
@@ -142,21 +120,6 @@ let int2bin =
     | None -> "0b0"
     | Some i -> "0b" ^ Bytes.sub_string buf i (int_size - i) *)
     Bytes.sub_string buf 0 int_size
-
-  
-(* let int_size_32 = 32 - 1
-let int2bin_32 =
-  let buf = Bytes.create int_size_32 in
-  fun n ->
-    for i = 0 to int_size_32 - 1 do
-      let pos = int_size_32 - 1 - i in
-      Bytes.set buf pos (if n land (1 lsl i) != 0 then '1' else '0')
-    done;
-    (* skip leading zeros *)
-    (* match Bytes.index_opt buf '1' with
-    | None -> "0b0"
-    | Some i -> "0b" ^ Bytes.sub_string buf i (int_size_32 - i) *)
-    Bytes.sub_string buf 0 int_size_32 *)
 
 let int32_size = 32
 
