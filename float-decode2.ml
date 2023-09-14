@@ -43,8 +43,8 @@ print_endline (int32_to_bin e) *)
 let float_decode bits =
   let p1 = Int32.shift_left (Int32.logand (Int32.shift_left(Int32.of_int 0b11111111) 0) bits) 24 in
   let p2 = Int32.shift_left (Int32.logand (Int32.shift_left(Int32.of_int 0b11111111) 8) bits) 8 in
-  let p3 = Int32.shift_left (Int32.logand (Int32.shift_right(Int32.of_int 0b11111111) 16) bits) 8 in
-  let p4 = Int32.shift_left (Int32.logand (Int32.shift_right(Int32.of_int 0b11111111) 24) bits) 24 in
+  let p3 = Int32.shift_right (Int32.logand (Int32.shift_left(Int32.of_int 0b11111111) 16) bits) 8 in
+  let p4 = Int32.shift_right (Int32.logand (Int32.shift_left(Int32.of_int 0b11111111) 24) bits) 24 in
   let sum = Int32.add (Int32.add p1 p2) (Int32.add p3 p4) in
   Int32.float_of_bits sum
 ;;
