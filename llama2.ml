@@ -168,9 +168,20 @@ let int32_to_bin n =
   done;
   Bytes.sub_string buf 0 int32_size
 
+
+let float_decode bits =
+  let p1 = Int32.shift_left (Int32.logand (Int32.shift_left(Int32.of_int 0b11111111) 0) bits) 24 in
+  let p2 = Int32.shift_left (Int32.logand (Int32.shift_left(Int32.of_int 0b11111111) 8) bits) 8 in
+  let p3 = Int32.shift_left (Int32.logand (Int32.shift_right(Int32.of_int 0b11111111) 16) bits) 8 in
+  let p4 = Int32.shift_left (Int32.logand (Int32.shift_right(Int32.of_int 0b11111111) 24) bits) 24 in
+  let sum = Int32.add (Int32.add p1 p2) (Int32.add p3 p4) in
+  Int32.float_of_bits sum
+;;
+
+
 let input_binary_float file =
   let int_bits = input_binary_int file in
-  print_endline (int2bin int_bits);
+  (* print_endline (int2bin int_bits);
   (* let q = 0b000000000000000000000000000000011111111111111111111111111111111 land int_bits in *)
   let q = int_bits in
   let q32 = Int32.of_int q in
@@ -178,8 +189,8 @@ let input_binary_float file =
   print_endline (int2bin q);
   (* print_endline (string_of_float (Int32.float_of_bits (Int32.of_int q))); *)
   print_endline (string_of_float (Int32.float_of_bits q32));
-  let float_bits = Int32.float_of_bits (Int32.of_int int_bits) in
-  float_bits
+  let float_bits = Int32.float_of_bits (Int32.of_int int_bits) in *)
+  float_decode (Int32.of_int int_bits)
 ;;
 
 
