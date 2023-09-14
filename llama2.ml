@@ -250,12 +250,12 @@ let tokenizer_init conf file =
     let len = (read_int 1).(0) in
     (* let bstr = Bytes.to_string (read_float len).(0) in *)
     (* let bstr = Bytes.to_string (Bytes.create(5)) in *)
-    let bytes = Bytes.create len in
-    let bstr = really_input file bytes 0 len in
+    let bstr = Bytes.create len in
+    really_input file bstr 0 len;
     vocab := bstr :: !vocab;
   done;
 
-  (!vocab, List.rev !vocab_scores, !max_token_length)
+  (List.rev !vocab, List.rev !vocab_scores, !max_token_length)
 ;;
 
   
@@ -265,6 +265,7 @@ let run args =
   let temperature = args.temperature in
   let steps = args.steps in
   let prompt = args.prompt in
+
 
   let rng_seed = int_of_float (Unix.time ()) in
   Random.init rng_seed;
@@ -294,7 +295,20 @@ let run args =
   print_endline "filhuksdf";
   print_endline (string_of_int max_token_length);
   print_endline (string_of_float (List.nth vocab_scores 0));
-  print_endline (string_of_float (List.nth vocab_scores 1000))
+  (* print_endline (string_of_float (List.nth vocab_scores 1000)); *)
+  print_endline (Bytes.to_string (List.nth vocab 0));
+  print_endline (Bytes.to_string (List.nth vocab 1));
+  print_endline (Bytes.to_string (List.nth vocab 2));
+  print_endline (Bytes.to_string (List.nth vocab 3));
+  print_bytes (List.nth vocab 0);
+  print_bytes (List.nth vocab 1);
+  print_bytes (List.nth vocab 2);
+  print_bytes (List.nth vocab 3);
+
+
+
+  if temperature = -1. && steps == -2821 && prompt = "just to stop [unused-var] warnings" then print_endline "skfjkhg"
+  
 
   (* print_endline checkpoint;
   let file_name = "tokenizer.bin" in
