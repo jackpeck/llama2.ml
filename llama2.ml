@@ -63,13 +63,12 @@ let print_config config =
     config.dim config.hidden_dim config.n_layers config.n_heads config.n_kv_heads config.vocab_size config.seq_len config.shared_weights
     
 
-let read_config checkpoint =
+let read_config file checkpoint =
   let size = 28 in (* bytes in int * 7 = 28 *)
   let config_header = Bytes.create size in
-  let ic = open_in_bin checkpoint in
   try
-    let read_bytes = input ic config_header 0 size in
-    close_in ic;
+    let read_bytes = input file config_header 0 size in
+    (* close_in file; *)
     if read_bytes <> size then begin
       Printf.printf "Couldn't read config header from file %s\n" checkpoint;
       exit 1
@@ -91,7 +90,7 @@ let read_config checkpoint =
     config
   with
   | Sys_error msg ->
-    close_in ic;
+    close_in file;
     Printf.printf "Couldn't open file %s: %s\n" checkpoint msg;
     exit 1
 ;;
@@ -107,7 +106,7 @@ type transformer_weights = {
   mutable rms_att_weight : float array;
 }
 
-let checkpoint_init_weights weights conf file shared_weights file_size =
+(* let checkpoint_init_weights weights conf file shared_weights file_size =
   (* let ic = open_in_bin checkpoint in *)
   let read_floats count =
     let buffer = Bytes.create (count * 4) in
@@ -126,7 +125,76 @@ let checkpoint_init_weights weights conf file shared_weights file_size =
 
   weights.token_embedding_table <- read_floats (conf.vocab_size * conf.dim);
   weights.rms_att_weight <- read_floats (conf.n_layers * conf.dim)
+;; *)
+
+
+(* https://discuss.ocaml.org/t/pretty-printing-binary-ints/9062/7 *)
+let int_size = Sys.word_size - 1
+let int2bin =
+  let buf = Bytes.create int_size in
+  fun n ->
+    for i = 0 to int_size - 1 do
+      let pos = int_size - 1 - i in
+      Bytes.set buf pos (if n land (1 lsl i) != 0 then '1' else '0')
+    done;
+    (* skip leading zeros *)
+    (* match Bytes.index_opt buf '1' with
+    | None -> "0b0"
+    | Some i -> "0b" ^ Bytes.sub_string buf i (int_size - i) *)
+    Bytes.sub_string buf 0 int_size
+
+  
+(* let int_size_32 = 32 - 1
+let int2bin_32 =
+  let buf = Bytes.create int_size_32 in
+  fun n ->
+    for i = 0 to int_size_32 - 1 do
+      let pos = int_size_32 - 1 - i in
+      Bytes.set buf pos (if n land (1 lsl i) != 0 then '1' else '0')
+    done;
+    (* skip leading zeros *)
+    (* match Bytes.index_opt buf '1' with
+    | None -> "0b0"
+    | Some i -> "0b" ^ Bytes.sub_string buf i (int_size_32 - i) *)
+    Bytes.sub_string buf 0 int_size_32 *)
+
+let int32_size = 32
+
+let int32_to_bin n =
+  let buf = Bytes.create int32_size in
+  for i = 0 to int32_size - 1 do
+    let pos = int32_size - 1 - i in
+    Bytes.set buf pos (if Int32.logand n (Int32.shift_left (Int32.of_int 1) i) <> 0l then '1' else '0')
+  done;
+  Bytes.sub_string buf 0 int32_size
+
+let input_binary_float file =
+  let int_bits = input_binary_int file in
+  print_endline (int2bin int_bits);
+  (* let q = 0b000000000000000000000000000000011111111111111111111111111111111 land int_bits in *)
+  let q = int_bits in
+  let q32 = Int32.of_int q in
+  print_endline (int32_to_bin q32);
+  print_endline (int2bin q);
+  (* print_endline (string_of_float (Int32.float_of_bits (Int32.of_int q))); *)
+  print_endline (string_of_float (Int32.float_of_bits q32));
+  let float_bits = Int32.float_of_bits (Int32.of_int int_bits) in
+  float_bits
 ;;
+
+
+let checkpoint_init_weights weights conf file shared_weights file_size =
+  let read_floats count =
+    let values = Array.make count 0.0 in
+    for i = 0 to count - 1 do
+      values.(i) <- input_binary_float file;
+    done;
+    values
+  in
+
+  (* read_floats (31); *)
+  weights.token_embedding_table <- read_floats (conf.vocab_size * conf.dim);
+  weights.rms_att_weight <- read_floats (conf.n_layers * conf.dim)
 
 
 
@@ -154,7 +222,7 @@ let run args =
   Random.init rng_seed;
   print_endline (string_of_int rng_seed);
   let file = open_in_bin checkpoint in
-  let config = read_config checkpoint in
+  let config = read_config file checkpoint in
   print_config config;
   let stat = Unix.stat checkpoint in
   let file_size = stat.st_size in
@@ -163,7 +231,10 @@ let run args =
   checkpoint_init_weights transformer_weights config file file_size config.shared_weights;
   (* print_endline transformer_weights.token_embedding_table *)
   (* print_token_embedding_table transformer_weights *)
-  print_endline (string_of_float transformer_weights.token_embedding_table.(0))
+  print_endline (string_of_float transformer_weights.token_embedding_table.(0));
+  print_endline (string_of_float transformer_weights.token_embedding_table.(1));
+  print_endline (string_of_float transformer_weights.token_embedding_table.(2));
+  print_endline (string_of_float transformer_weights.token_embedding_table.(10000))
 
 
 
