@@ -104,7 +104,20 @@ let read_config file checkpoint =
 type transformer_weights = {
   mutable token_embedding_table : float array;
   mutable rms_att_weight : float array;
+  mutable wq : float array;
+  mutable wk : float array;
+  mutable wv : float array;
+  mutable wo : float array;
+  mutable rms_ffn_weight : float array;
+  mutable w1 : float array;
+  mutable w2 : float array;
+  mutable w3 : float array;
+  mutable rms_final_weight : float array;
+  mutable freq_cis_real : float array;
+  mutable freq_cis_imag : float array;
+  mutable wcls : float array;
 }
+
 
 (* https://discuss.ocaml.org/t/pretty-printing-binary-ints/9062/7 *)
 let int_size = Sys.word_size - 1
@@ -144,15 +157,6 @@ let float_decode bits =
 
 let input_binary_float file =
   let int_bits = input_binary_int file in
-  (* print_endline (int2bin int_bits);
-  (* let q = 0b000000000000000000000000000000011111111111111111111111111111111 land int_bits in *)
-  let q = int_bits in
-  let q32 = Int32.of_int q in
-  print_endline (int32_to_bin q32);
-  print_endline (int2bin q);
-  (* print_endline (string_of_float (Int32.float_of_bits (Int32.of_int q))); *)
-  print_endline (string_of_float (Int32.float_of_bits q32));
-  let float_bits = Int32.float_of_bits (Int32.of_int int_bits) in *)
   float_decode (Int32.of_int int_bits)
 ;;
 
@@ -168,7 +172,24 @@ let checkpoint_init_weights weights conf file shared_weights file_size =
 
   (* read_floats (31); *)
   weights.token_embedding_table <- read_floats (conf.vocab_size * conf.dim);
-  weights.rms_att_weight <- read_floats (conf.n_layers * conf.dim)
+  weights.rms_att_weight <- read_floats (conf.n_layers * conf.dim);
+  weights.wq <- read_floats (conf.n_layers * conf.dim * conf.dim);
+  weights.wk <- read_floats (conf.n_layers * conf.dim * conf.dim);
+  weights.wv <- read_floats (conf.n_layers * conf.dim * conf.dim);
+  weights.wo <- read_floats (conf.n_layers * conf.dim * conf.dim);
+  weights.rms_ffn_weight <- read_floats (conf.n_layers * conf.dim);
+  weights.w1 <- read_floats (conf.n_layers * conf.dim * conf.hidden_dim);
+  weights.w2 <- read_floats (conf.n_layers * conf.hidden_dim * conf.dim);
+  weights.w3 <- read_floats (conf.n_layers * conf.dim * conf.hidden_dim);
+  weights.rms_final_weight <- read_floats conf.dim;
+  weights.freq_cis_real <- read_floats (conf.seq_len * (conf.dim / conf.n_heads) / 2);
+  weights.freq_cis_imag <- read_floats (conf.seq_len * (conf.dim / conf.n_heads) / 2);
+
+  (* The last line in Python code: *)
+  if shared_weights = 1 then
+    weights.wcls <- weights.token_embedding_table
+  else
+    weights.wcls <- read_floats ((file_size - pos_in file) / 4)
 
 
 
@@ -176,8 +197,22 @@ let create_transformer_weights () =
   {
     token_embedding_table = [||];
     rms_att_weight = [||];
+    wq = [||];
+    wk = [||];
+    wv = [||];
+    wo = [||];
+    rms_ffn_weight = [||];
+    w1 = [||];
+    w2 = [||];
+    w3 = [||];
+    rms_final_weight = [||];
+    freq_cis_real = [||];
+    freq_cis_imag = [||];
+    wcls = [||];
   }
-
+    
+;;
+  
 
 let print_token_embedding_table weights =
   Array.iteri (fun i value ->
@@ -202,13 +237,15 @@ let run args =
   let file_size = stat.st_size in
   (* print_endline (string_of_int file_size) *)
   let transformer_weights = create_transformer_weights () in 
-  checkpoint_init_weights transformer_weights config file file_size config.shared_weights;
+  checkpoint_init_weights transformer_weights config file config.shared_weights file_size;
   (* print_endline transformer_weights.token_embedding_table *)
   (* print_token_embedding_table transformer_weights *)
   print_endline (string_of_float transformer_weights.token_embedding_table.(0));
   print_endline (string_of_float transformer_weights.token_embedding_table.(1));
   print_endline (string_of_float transformer_weights.token_embedding_table.(2));
-  print_endline (string_of_float transformer_weights.token_embedding_table.(10000))
+  print_endline (string_of_float transformer_weights.token_embedding_table.(10000));
+  print_endline (string_of_float transformer_weights.token_embedding_table.(100000));
+  print_endline (string_of_float transformer_weights.freq_cis_imag.(1000))
 
 
 
