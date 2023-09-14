@@ -219,6 +219,47 @@ let print_token_embedding_table weights =
     Printf.printf "token_embedding_table[%d]: %f\n" i value
   ) weights.token_embedding_table
 ;;
+
+(* let input_binary typ file = match typ with
+  | "f" -> input_binary_float file
+  | "i" -> input_binary_int file *)
+
+let tokenizer_init conf file =
+  let vocab = ref [] in
+  let vocab_scores = ref [] in
+  let max_token_length = ref 0 in
+
+  (* let read_float count length =
+    let values = Array.make count 0 in
+    for i = 0 to count - 1 do
+      values.(i) <- input_binary_float file;
+    done;
+    values
+  in *)
+  let read_int count =
+    let values = Array.make count 0 in
+    for i = 0 to count - 1 do
+      values.(i) <- input_binary_int file;
+    done;
+    values
+  in
+
+  (* max_token_length := (read_int 1).(0); *)
+  (* max_token_length := 4; *)
+  (* max_token_length := input_binary_int file; *)
+  max_token_length := (Int.shift_right (input_binary_int file) 24);
+  (* print_endline (int32_to_bin (Int32.of_int(!max_token_length))); *)
+  (* print_endline (string_of_int (Int.shift_right !max_token_length 24)); *)
+  (* for _i = 0 to conf.vocab_size - 1 do
+    vocab_scores := (read_float 1 4).(0) :: !vocab_scores;
+    let len = (read_int 1 4).(0) in
+    let bstr = Bytes.to_string (read_float 1 len).(0) in
+    vocab := bstr :: !vocab;
+  done; *)
+
+  (!vocab, List.rev !vocab_scores, !max_token_length)
+;;
+
   
 
 let run args =
@@ -240,12 +281,46 @@ let run args =
   checkpoint_init_weights transformer_weights config file config.shared_weights file_size;
   (* print_endline transformer_weights.token_embedding_table *)
   (* print_token_embedding_table transformer_weights *)
-  print_endline (string_of_float transformer_weights.token_embedding_table.(0));
+  (* print_endline (string_of_float transformer_weights.token_embedding_table.(0));
   print_endline (string_of_float transformer_weights.token_embedding_table.(1));
   print_endline (string_of_float transformer_weights.token_embedding_table.(2));
   print_endline (string_of_float transformer_weights.token_embedding_table.(10000));
   print_endline (string_of_float transformer_weights.token_embedding_table.(100000));
-  print_endline (string_of_float transformer_weights.freq_cis_imag.(1000))
+  print_endline (string_of_float transformer_weights.freq_cis_imag.(1000)) *)
+
+  let steps = if steps <= 0 || steps > config.seq_len then config.seq_len else steps in
+  (* print_endline (string_of_int steps); *)
+
+  let tokenizer_file = open_in_bin "tokenizer.bin" in
+  let vocab, vocab_scores, max_token_length = tokenizer_init config tokenizer_file in
+  print_endline "filhuksdf";
+  print_endline (string_of_int max_token_length)
+
+  (* print_endline checkpoint;
+  let file_name = "tokenizer.bin" in
+  try
+    let file = open_in_bin file_name in
+    print_endline (string_of_int (input_binary_int file));
+    print_endline (string_of_int (input_binary_int file));
+    print_endline (string_of_int (input_binary_int file));
+    print_endline (string_of_bool (not (input_binary_int file = 0)));
+    if not (input_binary_int file = 0) then begin
+      close_in file;
+      print_endline "Couldn't load tokenizer.bin";
+      exit 1
+    end;
+
+    let vocab, vocab_scores, max_token_length = tokenizer_init config file in
+
+    (* Use vocab, vocab_scores, and max_token_length as needed *)
+
+    close_in file;
+  with
+  | Sys_error msg ->
+    print_endline ("Error: " ^ msg);
+    exit 1
+;; *)
+
 
 
 
