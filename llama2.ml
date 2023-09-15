@@ -378,7 +378,7 @@ let bpe_encode text vocab vocab_scores =
   foo (); *)
 
   (* let merge_tokens tokens vocab vocab_scores = [] in *)
-  let merge_tokens tokens vocab vocab_scores =
+  let rec merge_tokens tokens vocab vocab_scores =
     let rec find_best_pair tokens best_score best_id best_index i = match tokens with
       (* | token1::token2::ts -> 1,2 *)
       | token1::token2::ts -> 
@@ -395,9 +395,11 @@ let bpe_encode text vocab vocab_scores =
       | token::[] -> best_id, best_index
       | [] -> best_id, best_index
     in
-      (* [] *)
-      let best_id, best_index = (find_best_pair tokens (-1e10) 3 4 0) in
-      [best_id; best_index]
+      let best_id, best_index = (find_best_pair tokens (-1e10) (-1) 0 0) in
+      (* [best_id; best_index] *)
+      if best_id = -1
+        then tokens
+        else merge_tokens ((take best_index tokens) @ (best_id :: drop (best_index + 2) tokens)) vocab vocab_scores
 
   in
   let t2 = merge_tokens !tokens vocab vocab_scores in
