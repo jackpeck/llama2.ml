@@ -419,40 +419,6 @@ let dot_product arr1 arr2 =
   Array.fold_left ( +. ) 0.0 multiplied
 ;;
 
-(* let softmax x size =
-  (* find max value *)
-  let max_val = Array.fold_left max x.(0) (Array.sub x 1 (size - 1)) in
-
-  print_endline "input x";
-  print_float_array x;
-
-  print_endline "max_val";
-  print_float max_val;
-
-  (* exponentiate and sum *)
-  let exp_sum, softmaxed, index =
-    Array.fold_left (fun (sum, result, index) elem ->
-      (* let exp_elem = exp (elem -. max_val) in
-      sum +. exp_elem,
-      Array.append result [|exp_elem|] *)
-
-      if index < size then
-        let exp_elem = exp (elem -. max_val) in
-        sum +. exp_elem,
-        Array.append result [|exp_elem|], (index + 1)
-      else
-        sum, Array.append result [|elem|], (index + 1)
-    ) (0.0, [||], 0) x
-  in
-  print_endline "exp_sum";
-  print_float exp_sum;
-  print_endline "softmaxed";
-  print_float_array softmaxed;
-
-  (* normalize *)
-  Array.map (fun elem -> elem /. exp_sum) softmaxed
-;; *)
-
 let softmax x size =
   let max_val = Array.fold_left max x.(0) (Array.sub x 1 (size - 1)) in
   let exp_sum, softmaxed, index =
@@ -475,6 +441,11 @@ let softmax x size =
   in
   softmaxed
 ;;
+
+let accum a b =
+  Array.iteri (fun i elem -> a.(i) <- a.(i) +. elem) b;
+  a
+
 
 
 let transformer token pos conf state weights =
@@ -536,30 +507,6 @@ let transformer token pos conf state weights =
       let k = Array.sub state.k (h * head_size) head_size in
 
       (* print_float_array k *)
-
-      (* Rotate q and k by the freq_cis_real and freq_cis_imag *)
-      (* for i = 0 to (head_size - 1) step 2 do
-        let q0, q1 = q.(i), q.(i + 1) in
-        let k0, k1 = k.(i), k.(i + 1) in
-        let fcr = freq_cis_real_row.(i / 2) in
-        let fci = freq_cis_imag_row.(i / 2) in
-        q.(i) <- q0 *. fcr -. q1 *. fci;
-        q.(i + 1) <- q0 *. fci +. q1 *. fcr;
-        k.(i) <- k0 *. fcr -. k1 *. fci;
-        k.(i + 1) <- k0 *. fci +. k1 *. fcr;
-      done; *)
-
-      (* Rotate q and k by the freq_cis_real and freq_cis_imag *)
-      (* for i = 0 to (head_size - 1) step 2 do
-        let q0, q1 = q.(i), q.(i + 1) in
-        let k0, k1 = k.(i), k.(i + 1) in
-        let fcr = freq_cis_real_row.(i / 2) in
-        let fci = freq_cis_imag_row.(i / 2) in
-        q.(i) <- q0 *. fcr -. q1 *. fci;
-        q.(i + 1) <- q0 *. fci +. q1 *. fcr;
-        k.(i) <- k0 *. fcr -. k1 *. fci;
-        k.(i + 1) <- k0 *. fci +. k1 *. fcr;
-      done; *)
 
       let rotate_qk freq_cis_real_row freq_cis_imag_row q k head_size =
         let rec rotate i =
@@ -625,11 +572,77 @@ let transformer token pos conf state weights =
       (* print_float_array att; *)
 
       let att = softmax att (pos + 1) in
-      print_string "att softmaxed";
-      print_float_array att;
+      (* print_string "att softmaxed"; *)
+      (* print_float_array att; *)
 
+      let xb_ptr = h * head_size in
+      let zero_head_size = Array.make head_size 0. in
+      Array.blit zero_head_size 0 state.xb xb_ptr head_size;
 
+      (* print_float_array state.xb *)
+
+      for t = pos downto 0 do
+        (* Get the value vector for this head and at this timestep *)
+        let v = Array.sub state.value_cache (loff + t * dim + h * head_size) head_size in
+        (* Get the attention weight for this timestep *)
+        let a = att.(t) in
+        (* Accumulate the weighted value into xb *)
+        for i = 0 to (head_size - 1) do
+          state.xb.(xb_ptr + i) <- state.xb.(xb_ptr + i) +. a *. v.(i);
+        done;
+      done;
+
+      (* print_float_array state.xb *)
     done;
+
+    state.xb2 <- matmul state.xb2 state.xb
+                  (Array.sub weights.wo (l * dim * dim) (dim * dim)) dim dim;
+
+    (* print_float_array state.xb2 *)
+
+    let x = accum x state.xb2 in
+
+    (* print_float_array x; *)
+
+    state.xb <- rmsnorm state.xb x
+                     (Array.sub weights.rms_ffn_weight (l * dim) dim);
+
+    (* print_float_array state.xb *)
+
+    state.hb <- matmul state.hb state.xb
+                     (Array.sub weights.w1 (l * dim * hidden_dim) (dim * hidden_dim)) dim hidden_dim;
+
+    (* print_float_array state.hb *)
+
+    state.hb2 <- matmul state.hb2 state.xb
+                      (Array.sub weights.w3 (l * dim * hidden_dim) (dim * hidden_dim)) dim hidden_dim;
+
+    (* print_float_array state.hb2 *)
+
+    state.hb <- Array.init hidden_dim (fun i ->
+      state.hb.(i) *. (1.0 /. (1.0 +. exp (-. state.hb.(i))))
+    );
+
+    (* print_float_array state.hb *)
+
+    state.hb <- Array.init hidden_dim (fun i -> state.hb.(i) *. state.hb2.(i));
+
+    (* print_float_array state.hb *)
+
+    state.xb <- matmul state.xb state.hb
+                    (Array.sub weights.w2 (l * dim * hidden_dim) (dim * hidden_dim)) hidden_dim dim;
+
+    (* print_float_array state.xb *)
+
+    let x = accum x state.xb in 
+    print_float_array x
+    
+
+
+    
+
+
+
 
 
 
