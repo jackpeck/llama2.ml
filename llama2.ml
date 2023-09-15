@@ -412,6 +412,7 @@ let transformer token pos conf state weights =
       let q = Array.sub state.q (h * head_size) head_size in
       let k = Array.sub state.k (h * head_size) head_size in
 
+      (* Rotate q and k by the freq_cis_real and freq_cis_imag *)
       let rotate_qk freq_cis_real_row freq_cis_imag_row q k head_size =
         let rec rotate i =
           if i < head_size then
@@ -465,8 +466,10 @@ let transformer token pos conf state weights =
         att.(t) <- score;
       done;
 
+      (* Softmax the scores to get attention weights, from 0..pos inclusive *)
       let att = softmax att (pos + 1) in
 
+      (* Weighted sum of the values, store back into xb *)
       let xb_ptr = h * head_size in
       let zero_head_size = Array.make head_size 0. in
       Array.blit zero_head_size 0 state.xb xb_ptr head_size;
@@ -483,35 +486,43 @@ let transformer token pos conf state weights =
       done;
     done;
 
+    (* Final matrix multiplication to get the output of the attention *)
     state.xb2 <- matmul state.xb2 state.xb
                   (Array.sub weights.wo (l * dim * dim) (dim * dim)) dim dim;
 
+    (* Residual connection back into x *)
     state.x <- accum state.x state.xb2;
 
+    (* FFN rmsnorm *)
     state.xb <- rmsnorm state.xb state.x
                      (Array.sub weights.rms_ffn_weight (l * dim) dim);
 
+    (* Calculate self.w1(x) and self.w3(x) for FFN *)
     state.hb <- matmul state.hb state.xb
                      (Array.sub weights.w1 (l * dim * hidden_dim) (dim * hidden_dim)) dim hidden_dim;
-
-
     state.hb2 <- matmul state.hb2 state.xb
                       (Array.sub weights.w3 (l * dim * hidden_dim) (dim * hidden_dim)) dim hidden_dim;
 
+    (* SwiGLU non-linearity *)
     state.hb <- Array.init hidden_dim (fun i ->
       state.hb.(i) *. (1.0 /. (1.0 +. exp (-. state.hb.(i))))
     );
 
+    (* Elementwise multiply with w3(x) *)
     state.hb <- Array.init hidden_dim (fun i -> state.hb.(i) *. state.hb2.(i));
 
+    (* Final matrix multiplication to get the output of the FFN *)
     state.xb <- matmul state.xb state.hb
                     (Array.sub weights.w2 (l * dim * hidden_dim) (dim * hidden_dim)) hidden_dim dim;
 
+    (* Residual connection *)
     state.x <- accum state.x state.xb; 
   done;
 
+  (* Final rmsnorm *)
   state.x <- rmsnorm state.x state.x weights.rms_final_weight;
 
+  (* Classifier into logits *)
   state.logits <- matmul state.logits state.x weights.wcls dim conf.vocab_size;
 ;;
 
