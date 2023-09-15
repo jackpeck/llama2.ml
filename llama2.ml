@@ -736,34 +736,43 @@ let run args =
 
   (* transformer token pos config state weights; *)
 
-  transformer !token !pos config state weights;
-  print_int !pos;
+  let rec get_tokens = function
+    | 0 -> ()
+    | n -> 
+      transformer !token !pos config state weights;
+      print_int !pos;
 
-  if !pos < List.length prompt_tokens then
-    next_token := List.nth prompt_tokens !pos
-  else
-    let () =
-      if temperature = 0.0 then
-        next_token := argmax state.logits
+      if !pos < List.length prompt_tokens then
+        next_token := List.nth prompt_tokens !pos
       else
         let () =
-          for i = 0 to Array.length state.logits - 1 do
-            state.logits.(i) <- state.logits.(i) /. temperature;
-          done;
+          if temperature = 0.0 then
+            next_token := argmax state.logits
+          else
+            let () =
+              for i = 0 to Array.length state.logits - 1 do
+                state.logits.(i) <- state.logits.(i) /. temperature;
+              done;
+            in
+            let softmaxed_logits = softmax state.logits config.vocab_size in
+            next_token := sample softmaxed_logits
         in
-        let softmaxed_logits = softmax state.logits config.vocab_size in
-        next_token := sample softmaxed_logits
-    in
-    ();
+        ();
 
-  (* Following BOS token (1), sentencepiece decoder strips any leading whitespace *)
-  let token_str =
-    if !token = 1 && vocab_a.(!next_token).[0] = ' ' then
-      trim_left vocab_a.(!next_token)
-    else
-      vocab_a.(!next_token)
-  in
-    print_string token_str;
+      (* Following BOS token (1), sentencepiece decoder strips any leading whitespace *)
+      let token_str =
+        if !token = 1 && vocab_a.(!next_token).[0] = ' ' then
+          trim_left vocab_a.(!next_token)
+        else
+          vocab_a.(!next_token)
+      in
+        print_string token_str;
+
+      token := !next_token;
+      pos := !pos + 1;
+
+      get_tokens (n - 1) in
+  get_tokens steps;
 
   if temperature = -1. && steps == -2821 && prompt = "just to stop [unused-var] warnings" then print_endline "skfjkhg"
   
