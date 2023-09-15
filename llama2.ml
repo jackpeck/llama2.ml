@@ -335,52 +335,15 @@ let bpe_encode text vocab vocab_scores =
     tokens := id :: !tokens
   ) text;
 
-  (* print_endline (string_of_int (List.hd !tokens)); *)
-
   tokens := List.rev !tokens;
 
-  print_int_list !tokens;
-
-  (* !tokens *)
+  (* print_int_list !tokens; *)
 
   let vocab_a = Array.of_list vocab in
   let vocab_scores_a = Array.of_list vocab_scores in
 
-  (* let merge_tokens tokens vocab vocab_scores =
-    print_endline "a";
-    []
-    (* let rec find_best_pair best_score best_id best_idx i =
-      if i + 1>= List.length tokens then best_id, best_idx
-      else
-        let token1 = List.nth tokens i in
-        let token2 = List.nth tokens (i + 1) in
-        let string = vocab_a.(token1) ^ vocab_a.(token2) in
-        let id = str_lookup string vocab in 
-        print_endline id; *)
-      (* if i < List.length tokens - 1 then begin
-        let token1 = List.nth tokens i in
-        let token2 = List.nth tokens (i + 1) in
-        let string = vocab_a.(token1) ^ vocab_a.(token2) in
-        let id = str_lookup string vocab in
-        if id <> -1 && vocab_scores_a.(id) > best_score then
-          find_best_pair vocab_scores_a.(id) id i (i + 1)
-        else
-          find_best_pair best_score best_id best_idx (i + 1)
-      end else
-        (best_score, best_id, best_idx)
-    in *)
-
-    let tokens2 = merge_tokens !tokens vocab vocab_a in
-    print_int_list tokens2;
-    !tokens *)
-
-  (* let foo q = q in
-  foo (); *)
-
-  (* let merge_tokens tokens vocab vocab_scores = [] in *)
   let rec merge_tokens tokens vocab vocab_scores =
     let rec find_best_pair tokens best_score best_id best_index i = match tokens with
-      (* | token1::token2::ts -> 1,2 *)
       | token1::token2::ts -> 
         let string = vocab_a.(token1) ^ vocab_a.(token2) in
         let id = str_lookup string vocab in
@@ -396,7 +359,6 @@ let bpe_encode text vocab vocab_scores =
       | [] -> best_id, best_index
     in
       let best_id, best_index = (find_best_pair tokens (-1e10) (-1) 0 0) in
-      (* [best_id; best_index] *)
       if best_id = -1
         then tokens
         else merge_tokens ((take best_index tokens) @ (best_id :: drop (best_index + 2) tokens)) vocab vocab_scores
@@ -405,77 +367,6 @@ let bpe_encode text vocab vocab_scores =
   let t2 = merge_tokens !tokens vocab vocab_scores in
   print_int_list t2;
   !tokens
-
-
-  (* !tokens *)
-(* 
-  let vocab_a = Array.of_list vocab in
-  let vocab_scores_a = Array.of_list vocab_scores in
-
-  let merge_tokens tokens vocab vocab_scores =
-    let rec find_best_pair best_score best_id best_idx i =
-      if i < List.length tokens - 1 then begin
-        let token1 = List.nth tokens i in
-        let token2 = List.nth tokens (i + 1) in
-        let string = vocab_a.(token1) ^ vocab_a.(token2) in
-        let id = str_lookup string vocab in
-        if id <> -1 && vocab_scores_a.(id) > best_score then
-          find_best_pair vocab_scores_a.(id) id i (i + 1)
-        else
-          find_best_pair best_score best_id best_idx (i + 1)
-      end else
-        (best_score, best_id, best_idx)
-    in
-  
-    let rec merge_pairs tokens =
-      match find_best_pair (-1e10) (-1) (-1) 0 with
-      | (best_score, best_id, best_idx) when best_idx = -1 ->
-          tokens
-      | (_, best_id, best_idx) ->
-          let new_tokens = take (best_idx + 1) tokens @ [best_id] @ drop (best_idx + 2) tokens in
-          merge_pairs new_tokens
-    in
-  
-    merge_pairs tokens
-  in
-  tokens := merge_tokens !tokens vocab vocab_scores;
-  print_int_list !tokens;
-  !tokens *)
-  
-
-  
-
-  (* Merge consecutive pairs according to scores in vocab_scores
-  let rec merge_pairs () =
-    let best_score = ref (-1e10) in
-    let best_id = ref (-1) in
-    let best_idx = ref (-1) in
-
-    for i = 0 to List.length !tokens - 2 do
-      let string = vocab.(List.nth !tokens i) ^ vocab.(List.nth !tokens (i + 1)) in
-      let id = str_lookup string vocab in
-      if id <> -1 && vocab_scores.(id) > !best_score then begin
-        best_score := vocab_scores.(id);
-        best_id := id;
-        best_idx := i
-      end
-    done;
-
-    if !best_idx = -1 then
-      ()
-    else
-      (* Merge the consecutive pair into new token *)
-      (* List.nth !tokens !best_idx <- !best_id; *)
-
-      (* Delete token at position best_idx+1, shift the entire sequence back 1 *)
-      (* tokens := List.take !best_idx !tokens @ List.drop (best_idx + 2) !tokens; *)
-      tokens := List.take (!best_idx - 1) !tokens @ (!best_id :: (List.drop (best_idx + 2) !tokens));
-
-      merge_pairs ()
-  in
-
-  merge_pairs ();
-  List.rev !tokens *)
 ;;
 
 
