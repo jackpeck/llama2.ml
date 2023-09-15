@@ -478,8 +478,8 @@ let transformer token pos conf state weights =
   (* print_float_array content_row; *)
 
   (* Forward all the layers *)
-  (* for l = 0 to (conf.n_layers - 1) do *)
-    for l = 0 to 0 do
+  for l = 0 to (conf.n_layers - 1) do
+    (* for l = 0 to 0 do *)
     (* Attention rmsnorm *)
     state.xb <- rmsnorm state.xb state.x (Array.sub weights.rms_att_weight (l * dim) (dim));
     (* print_float_array state.xb; *)
@@ -634,18 +634,15 @@ let transformer token pos conf state weights =
     (* print_float_array state.xb *)
 
     state.x <- accum state.x state.xb; 
-    print_float_array state.x
-    
-
-
-    
-
-
-
-
-
-
+    (* print_float_array state.x *)
   done;
+
+  state.x <- rmsnorm state.x state.x weights.rms_final_weight;
+
+  state.logits <- matmul state.logits state.x weights.wcls dim conf.vocab_size;
+
+  (* print_float_array state.logits *)
+  
 
 
 ;;
