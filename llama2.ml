@@ -260,41 +260,68 @@ let tokenizer_init conf file =
 
 
 type run_state = {
-  mutable x : int list;
-  mutable xb : int list;
-  mutable q : int list;
-  mutable k : int list;
-  mutable v : int list;
-  mutable att : int list;
-  mutable key_cache : int list;
-  mutable value_cache : int list;
-  mutable xb2 : int list;
-  mutable hb : int list;
-  mutable hb2 : int list;
-  mutable logits : int list;
+  mutable x : float array;
+  mutable xb : float array;
+  mutable q : float array;
+  mutable k : float array;
+  mutable v : float array;
+  mutable att : float array;
+  mutable key_cache : float array;
+  mutable value_cache : float array;
+  mutable xb2 : float array;
+  mutable hb : float array;
+  mutable hb2 : float array;
+  mutable logits : float array;
 }
 
-let init_run_state state config =
-  state.x <- List.init config.dim (fun _ -> 0);
-  state.xb <- List.init config.dim (fun _ -> 0);
-  state.xb2 <- List.init config.dim (fun _ -> 0);
-  state.hb <- List.init config.hidden_dim (fun _ -> 0);
-  state.hb2 <- List.init config.hidden_dim (fun _ -> 0);
-  state.q <- List.init config.dim (fun _ -> 0);
-  state.k <- List.init config.dim (fun _ -> 0);
-  state.v <- List.init config.dim (fun _ -> 0);
-  state.att <- List.init (config.n_heads * config.seq_len) (fun _ -> 0);
-  state.logits <- List.init config.vocab_size (fun _ -> 0);
-  state.key_cache <- List.init (config.n_layers * config.seq_len * config.dim) (fun _ -> 0);
-  state.value_cache <- List.init (config.n_layers * config.seq_len * config.dim) (fun _ -> 0)
-;;
+(* let init_run_state state config =
+  state.x <- Array.init config.dim (fun _ -> 0.);
+  state.xb <- Array.init config.dim (fun _ -> 0.);
+  state.xb2 <- Array.init config.dim (fun _ -> 0.);
+  state.hb <- Array.init config.hidden_dim (fun _ -> 0.);
+  state.hb2 <- Array.init config.hidden_dim (fun _ -> 0.);
+  state.q <- Array.init config.dim (fun _ -> 0.);
+  state.k <- Array.init config.dim (fun _ -> 0.);
+  state.v <- Array.init config.dim (fun _ -> 0.);
+  state.att <- Array.init (config.n_heads * config.seq_len) (fun _ -> 0.);
+  state.logits <- Array.init config.vocab_size (fun _ -> 0.);
+  state.key_cache <- Array.init (config.n_layers * config.seq_len * config.dim) (fun _ -> 0.);
+  state.value_cache <- Array.init (config.n_layers * config.seq_len * config.dim) (fun _ -> 0.)
+;; *)
   
+let init_run_state state config =
+  state.x <- Array.make config.dim 0.;
+  state.xb <- Array.make config.dim 0.;
+  state.xb2 <- Array.make config.dim 0.;
+  state.hb <- Array.make config.hidden_dim 0.;
+  state.hb2 <- Array.make config.hidden_dim 0.;
+  state.q <- Array.make config.dim 0.;
+  state.k <- Array.make config.dim 0.;
+  state.v <- Array.make config.dim 0.;
+  state.att <- Array.make (config.n_heads * config.seq_len) 0.;
+  state.logits <- Array.make config.vocab_size 0.;
+  state.key_cache <- Array.make (config.n_layers * config.seq_len * config.dim) 0.;
+  state.value_cache <- Array.make (config.n_layers * config.seq_len * config.dim) 0.
+;;
+
 
 let rec print_int_list = function
   | [] -> print_endline "";
   | x::xs -> print_int x;
     if xs <> [] then print_string ", ";
     print_int_list xs
+
+
+let print_float_array arr =
+  let len = Array.length arr in
+  for i = 0 to len - 1 do
+    print_float arr.(i);
+    if i < len - 1 then
+      print_string ", ";
+  done;
+  print_endline ""
+;;
+
 
 let rec take n lst =
   match n, lst with
@@ -370,6 +397,248 @@ let bpe_encode text vocab vocab_scores =
 ;;
 
 
+let rmsnorm out x weight =
+  let size = Array.length x in
+  let ss = Array.fold_left (fun acc elem -> acc +. elem *. elem) 0.0 x /. float size +. 1e-5 in
+  let ss = 1.0 /. sqrt ss in
+  Array.mapi (fun i elem -> weight.(i) *. ss *. elem) x
+;;
+
+let matmul xout x w n d =
+  Array.init d (fun i ->
+    let val' =
+      Array.init n (fun j -> w.(i * n + j) *. x.(j))
+      |> Array.fold_left (+.) 0.0
+    in
+    val'
+  )
+;;
+
+let dot_product arr1 arr2 =
+  let multiplied = Array.map2 ( *. ) arr1 arr2 in
+  Array.fold_left ( +. ) 0.0 multiplied
+;;
+
+(* let softmax x size =
+  (* find max value *)
+  let max_val = Array.fold_left max x.(0) (Array.sub x 1 (size - 1)) in
+
+  print_endline "input x";
+  print_float_array x;
+
+  print_endline "max_val";
+  print_float max_val;
+
+  (* exponentiate and sum *)
+  let exp_sum, softmaxed, index =
+    Array.fold_left (fun (sum, result, index) elem ->
+      (* let exp_elem = exp (elem -. max_val) in
+      sum +. exp_elem,
+      Array.append result [|exp_elem|] *)
+
+      if index < size then
+        let exp_elem = exp (elem -. max_val) in
+        sum +. exp_elem,
+        Array.append result [|exp_elem|], (index + 1)
+      else
+        sum, Array.append result [|elem|], (index + 1)
+    ) (0.0, [||], 0) x
+  in
+  print_endline "exp_sum";
+  print_float exp_sum;
+  print_endline "softmaxed";
+  print_float_array softmaxed;
+
+  (* normalize *)
+  Array.map (fun elem -> elem /. exp_sum) softmaxed
+;; *)
+
+let softmax x size =
+  let max_val = Array.fold_left max x.(0) (Array.sub x 1 (size - 1)) in
+  let exp_sum, softmaxed, index =
+    Array.fold_left (fun (sum, result, index) elem ->
+      if index < size then
+        let exp_elem = exp (elem -. max_val) in
+        sum +. exp_elem,
+        Array.append result [|exp_elem|],
+        index + 1
+      else
+        sum,
+        Array.append result [|elem|],
+        index + 1
+    ) (0.0, [||], 0) x
+  in
+  let softmaxed =
+    Array.mapi (fun i elem ->
+      if i < size then elem /. exp_sum else elem
+    ) softmaxed
+  in
+  softmaxed
+;;
+
+
+let transformer token pos conf state weights =
+  let x = state.x in
+  let dim = conf.dim in
+  let hidden_dim = conf.hidden_dim in
+  let head_size = dim / conf.n_heads in
+  print_endline "transformer";
+
+  (* Copy the token embedding into x *)
+  let content_row = Array.sub weights.token_embedding_table (token * dim) dim in
+  Array.blit content_row 0 x 0 dim;
+
+  (* print_float content_row.((token * dim) - 1); *)
+  (* print_float 0.; *)
+
+  (* Pluck out the "pos" row of freq_cis_real and freq_cis_imag *)
+  let freq_cis_real_row =
+    Array.sub weights.freq_cis_real
+              (pos * (head_size / 2))
+              (head_size / 2) in
+
+  let freq_cis_imag_row =
+    Array.sub weights.freq_cis_imag
+              (pos * (head_size / 2))
+              (head_size / 2) in
+
+  (* print_float freq_cis_real_row.(10); *)
+  print_float_array freq_cis_real_row;
+  print_float_array freq_cis_imag_row;
+  (* print_float_array content_row; *)
+
+  (* Forward all the layers *)
+  (* for l = 0 to (conf.n_layers - 1) do *)
+    for l = 0 to 0 do
+    (* Attention rmsnorm *)
+    state.xb <- rmsnorm state.xb x (Array.sub weights.rms_att_weight (l * dim) (dim));
+    (* print_float_array state.xb; *)
+
+
+    (* QKV matmuls for this position *)
+    state.q <- matmul state.q state.xb
+                      (Array.sub weights.wq (l * dim * dim) (dim * dim)) dim dim;
+
+    (* print_float_array state.q; *)
+
+    state.k <- matmul state.k state.xb
+                      (Array.sub weights.wk (l * dim * dim) (dim * dim)) dim dim;
+
+    state.v <- matmul state.v state.xb
+                      (Array.sub weights.wv (l * dim * dim) (dim * dim)) dim dim;
+
+    (* print_float_array state.k; *)
+
+    (* Apply RoPE rotation to the q and k vectors for each head *)
+    for h = 0 to (conf.n_heads - 1) do
+      (* Get the q and k vectors for this head *)
+      let q = Array.sub state.q (h * head_size) head_size in
+      let k = Array.sub state.k (h * head_size) head_size in
+
+      (* print_float_array k *)
+
+      (* Rotate q and k by the freq_cis_real and freq_cis_imag *)
+      (* for i = 0 to (head_size - 1) step 2 do
+        let q0, q1 = q.(i), q.(i + 1) in
+        let k0, k1 = k.(i), k.(i + 1) in
+        let fcr = freq_cis_real_row.(i / 2) in
+        let fci = freq_cis_imag_row.(i / 2) in
+        q.(i) <- q0 *. fcr -. q1 *. fci;
+        q.(i + 1) <- q0 *. fci +. q1 *. fcr;
+        k.(i) <- k0 *. fcr -. k1 *. fci;
+        k.(i + 1) <- k0 *. fci +. k1 *. fcr;
+      done; *)
+
+      (* Rotate q and k by the freq_cis_real and freq_cis_imag *)
+      (* for i = 0 to (head_size - 1) step 2 do
+        let q0, q1 = q.(i), q.(i + 1) in
+        let k0, k1 = k.(i), k.(i + 1) in
+        let fcr = freq_cis_real_row.(i / 2) in
+        let fci = freq_cis_imag_row.(i / 2) in
+        q.(i) <- q0 *. fcr -. q1 *. fci;
+        q.(i + 1) <- q0 *. fci +. q1 *. fcr;
+        k.(i) <- k0 *. fcr -. k1 *. fci;
+        k.(i + 1) <- k0 *. fci +. k1 *. fcr;
+      done; *)
+
+      let rotate_qk freq_cis_real_row freq_cis_imag_row q k head_size =
+        let rec rotate i =
+          if i < head_size then
+            let q0 = q.(i) in
+            let q1 = q.(i + 1) in
+            let k0 = k.(i) in
+            let k1 = k.(i + 1) in
+            let fcr = freq_cis_real_row.(i / 2) in
+            let fci = freq_cis_imag_row.(i / 2) in
+            q.(i) <- q0 *. fcr -. q1 *. fci;
+            q.(i + 1) <- q0 *. fci +. q1 *. fcr;
+            k.(i) <- k0 *. fcr -. k1 *. fci;
+            k.(i + 1) <- k0 *. fci +. k1 *. fcr;
+            rotate (i + 2)
+        in
+        rotate 0 in
+      rotate_qk freq_cis_real_row freq_cis_imag_row q k head_size;
+
+      (* Reassigned back to state.q and state.k *)
+      for i = 0 to (head_size - 1) do
+        state.q.(h * head_size + i) <- q.(i);
+        state.k.(h * head_size + i) <- k.(i);
+      done;
+
+
+      (* print_float_array k *)
+
+    done;
+
+    (* Save key and value at this time step (pos) to our kv cache *)
+    let loff = l * conf.seq_len * dim in
+    let offset = loff + pos * dim in
+    Array.blit state.k 0 state.key_cache offset dim;
+    Array.blit state.v 0 state.value_cache offset dim;
+
+    (* print_float_array state.key_cache; *)
+
+    (* Multihead attention. Iterate over all heads *)
+    for h = 0 to (conf.n_heads - 1) do
+      (* Get the query vector for this head *)
+      let q = Array.sub state.q (h * head_size) head_size in
+
+      (* Attention scores for this head *)
+      let att = Array.sub state.att (h * conf.seq_len) conf.seq_len in
+
+      (* print_float_array att *)
+
+      (* Iterate over all timesteps, including the current one *)
+      for t = 0 to pos do
+        (* Get the key vector for this head and at this timestep *)
+        let k =
+          Array.sub state.key_cache (loff + t * dim + h * head_size) head_size
+        in
+
+        (* Calculate the attention score as the dot product of q and k *)
+        let score = dot_product q k /. sqrt (float_of_int head_size) in
+
+        (* Save the score to the attention buffer *)
+        att.(t) <- score;
+      done;
+
+      (* print_float_array att; *)
+
+      let att = softmax att (pos + 1) in
+      print_string "att softmaxed";
+      print_float_array att;
+
+
+    done;
+
+
+
+  done;
+
+
+;;
+
+
 
 
 let run args =
@@ -388,8 +657,8 @@ let run args =
   let stat = Unix.stat checkpoint in
   let file_size = stat.st_size in
   (* print_endline (string_of_int file_size) *)
-  let transformer_weights = create_transformer_weights () in 
-  checkpoint_init_weights transformer_weights config file config.shared_weights file_size;
+  let weights = create_transformer_weights () in 
+  checkpoint_init_weights weights config file config.shared_weights file_size;
   (* print_endline transformer_weights.token_embedding_table *)
   (* print_token_embedding_table transformer_weights *)
   (* print_endline (string_of_float transformer_weights.token_embedding_table.(0));
@@ -425,18 +694,18 @@ let run args =
 
 
   let state = {
-    x = [];
-    xb = [];
-    q = [];
-    k = [];
-    v = [];
-    att = [];
-    key_cache = [];
-    value_cache = [];
-    xb2 = [];
-    hb = [];
-    hb2 = [];
-    logits = [];
+    x = [||];
+    xb = [||];
+    q = [||];
+    k = [||];
+    v = [||];
+    att = [||];
+    key_cache = [||];
+    value_cache = [||];
+    xb2 = [||];
+    hb = [||];
+    hb2 = [||];
+    logits = [||];
   } in
   init_run_state state config;
 
@@ -448,6 +717,39 @@ let run args =
       []
     in prompt_tokens;
 
+  (* Start the main loop *)
+  let start = ref 0 in  (* Used to time our code, only initialized after the first iteration *)
+  let next_token = ref 0 in (* Will store the next token in the sequence *)
+  (* Initialize with token 1 (=BOS), as done in Llama-2 sentencepiece tokenizer *)
+  let token = ref 1 in
+  let pos = ref 0 in (* Position in the sequence *)
+  (* Explicitly print the initial BOS token for stylistic symmetry reasons *)
+  print_endline "<s>";
+
+  (* transformer token pos config state weights; *)
+
+  transformer !token !pos config state weights;
+  print_int !pos;
+
+  if !pos < List.length prompt_tokens then
+    next_token := List.nth prompt_tokens !pos
+  else
+    let () =
+      print_endline (string_of_float state.logits.(0))
+      (* print_endline "q" *)
+      (* if temperature = 0.0 then
+        next_token := argmax state.logits
+      else
+        let () =
+          let factor = 1.0 /. temperature in
+          for i = 0 to Array.length state.logits - 1 do
+            state.logits.(i) <- state.logits.(i) *. factor;
+          done;
+        in
+        softmax state.logits config.vocab_size;
+        next_token := sample state.logits *)
+    in
+    ();
 
 
 
