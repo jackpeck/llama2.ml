@@ -1,27 +1,11 @@
 #load "unix.cma";;
 
-
-
-
-
-
-
-type args2 = {
+type args = {
   mutable checkpoint : string;
   mutable temperature : float;
   mutable steps : int;
   mutable prompt : string;
 }
-
-(* let run args =
-  match args.checkpoint, args.temperature, args.steps, args.prompt with
-  | checkpoint, temperature, steps, prompt ->
-      Printf.printf
-        "Checkpoint: %s, Temperature: %f, Steps: %d, Prompt: %s\n"
-        checkpoint temperature steps prompt *)
-
-
-
 
 let get_int32_le bytes offset =
   let b0 = Char.code (Bytes.get bytes (offset + 0)) in
@@ -30,7 +14,6 @@ let get_int32_le bytes offset =
   let b3 = Char.code (Bytes.get bytes (offset + 3)) in
   (b3 lsl 24) lor (b2 lsl 16) lor (b1 lsl 8) lor b0
 ;;
-
 
 let print_bytes bytes =
   let len = Bytes.length bytes in
@@ -72,8 +55,6 @@ let read_config file checkpoint =
       Printf.printf "Couldn't read config header from file %s\n" checkpoint;
       exit 1
     end;
-    (* print_bytes config_header; *)
-
     let dim = get_int32_le config_header 0 in
     let hidden_dim = get_int32_le config_header 4 in
     let n_layers = get_int32_le config_header 8 in
@@ -82,7 +63,7 @@ let read_config file checkpoint =
     let vocab_size = get_int32_le config_header 20 in
     let seq_len = get_int32_le config_header 24 in
 
-    (* # negative vocab size is hacky way of signaling unshared weights. bit yikes. *)
+    (* negative vocab size is hacky way of signaling unshared weights. bit yikes. *)
     let shared_weights = if vocab_size > 0 then 1 else 0 in
     let config =
       create_config dim hidden_dim n_layers n_heads n_kv_heads (abs vocab_size) seq_len shared_weights in
@@ -93,11 +74,6 @@ let read_config file checkpoint =
     Printf.printf "Couldn't open file %s: %s\n" checkpoint msg;
     exit 1
 ;;
-
-
-
-
-
 
 
 type transformer_weights = {
@@ -117,25 +93,8 @@ type transformer_weights = {
   mutable wcls : float array;
 }
 
-
-(* https://discuss.ocaml.org/t/pretty-printing-binary-ints/9062/7 *)
-let int_size = Sys.word_size - 1
-let int2bin =
-  let buf = Bytes.create int_size in
-  fun n ->
-    for i = 0 to int_size - 1 do
-      let pos = int_size - 1 - i in
-      Bytes.set buf pos (if n land (1 lsl i) != 0 then '1' else '0')
-    done;
-    (* skip leading zeros *)
-    (* match Bytes.index_opt buf '1' with
-    | None -> "0b0"
-    | Some i -> "0b" ^ Bytes.sub_string buf i (int_size - i) *)
-    Bytes.sub_string buf 0 int_size
-
-let int32_size = 32
-
 let int32_to_bin n =
+  let int32_size = 32 in
   let buf = Bytes.create int32_size in
   for i = 0 to int32_size - 1 do
     let pos = int32_size - 1 - i in
@@ -153,12 +112,10 @@ let float_decode bits =
   Int32.float_of_bits sum
 ;;
 
-
 let input_binary_float file =
   let int_bits = input_binary_int file in
   float_decode (Int32.of_int int_bits)
 ;;
-
 
 let checkpoint_init_weights weights conf file shared_weights file_size =
   let read_floats count =
@@ -169,7 +126,6 @@ let checkpoint_init_weights weights conf file shared_weights file_size =
     values
   in
 
-  (* read_floats (31); *)
   weights.token_embedding_table <- read_floats (conf.vocab_size * conf.dim);
   weights.rms_att_weight <- read_floats (conf.n_layers * conf.dim);
   weights.wq <- read_floats (conf.n_layers * conf.dim * conf.dim);
@@ -184,12 +140,10 @@ let checkpoint_init_weights weights conf file shared_weights file_size =
   weights.freq_cis_real <- read_floats (conf.seq_len * (conf.dim / conf.n_heads) / 2);
   weights.freq_cis_imag <- read_floats (conf.seq_len * (conf.dim / conf.n_heads) / 2);
 
-  (* The last line in Python code: *)
   if shared_weights = 1 then
     weights.wcls <- weights.token_embedding_table
   else
     weights.wcls <- read_floats ((file_size - pos_in file) / 4)
-
 
 
 let create_transformer_weights () =
@@ -209,19 +163,13 @@ let create_transformer_weights () =
     freq_cis_imag = [||];
     wcls = [||];
   }
-    
 ;;
-  
 
 let print_token_embedding_table weights =
   Array.iteri (fun i value ->
     Printf.printf "token_embedding_table[%d]: %f\n" i value
   ) weights.token_embedding_table
 ;;
-
-(* let input_binary typ file = match typ with
-  | "f" -> input_binary_float file
-  | "i" -> input_binary_int file *)
 
 let tokenizer_init conf file =
   let vocab = ref [] in
@@ -247,8 +195,6 @@ let tokenizer_init conf file =
   for _i = 0 to conf.vocab_size - 1 do
     vocab_scores := (read_float 1).(0) :: !vocab_scores;
     let len = (read_int 1).(0) in
-    (* let bstr = Bytes.to_string (read_float len).(0) in *)
-    (* let bstr = Bytes.to_string (Bytes.create(5)) in *)
     let bstr = Bytes.create len in
     really_input file bstr 0 len;
     vocab := (Bytes.to_string bstr) :: !vocab;
@@ -272,21 +218,6 @@ type run_state = {
   mutable hb2 : float array;
   mutable logits : float array;
 }
-
-(* let init_run_state state config =
-  state.x <- Array.init config.dim (fun _ -> 0.);
-  state.xb <- Array.init config.dim (fun _ -> 0.);
-  state.xb2 <- Array.init config.dim (fun _ -> 0.);
-  state.hb <- Array.init config.hidden_dim (fun _ -> 0.);
-  state.hb2 <- Array.init config.hidden_dim (fun _ -> 0.);
-  state.q <- Array.init config.dim (fun _ -> 0.);
-  state.k <- Array.init config.dim (fun _ -> 0.);
-  state.v <- Array.init config.dim (fun _ -> 0.);
-  state.att <- Array.init (config.n_heads * config.seq_len) (fun _ -> 0.);
-  state.logits <- Array.init config.vocab_size (fun _ -> 0.);
-  state.key_cache <- Array.init (config.n_layers * config.seq_len * config.dim) (fun _ -> 0.);
-  state.value_cache <- Array.init (config.n_layers * config.seq_len * config.dim) (fun _ -> 0.)
-;; *)
   
 let init_run_state state config =
   state.x <- Array.make config.dim 0.;
@@ -362,8 +293,6 @@ let bpe_encode text vocab vocab_scores =
   ) text;
 
   tokens := List.rev !tokens;
-
-  (* print_int_list !tokens; *)
 
   let vocab_a = Array.of_list vocab in
   let vocab_scores_a = Array.of_list vocab_scores in
@@ -442,8 +371,6 @@ let accum a b =
   Array.iteri (fun i elem -> a.(i) <- a.(i) +. elem) b;
   a
 
-
-
 let transformer token pos conf state weights =
   let dim = conf.dim in
   let hidden_dim = conf.hidden_dim in
@@ -452,9 +379,6 @@ let transformer token pos conf state weights =
   (* Copy the token embedding into x *)
   let content_row = Array.sub weights.token_embedding_table (token * dim) dim in
   Array.blit content_row 0 state.x 0 dim;
-
-  (* print_float content_row.((token * dim) - 1); *)
-  (* print_float 0.; *)
 
   (* Pluck out the "pos" row of freq_cis_real and freq_cis_imag *)
   let freq_cis_real_row =
@@ -584,17 +508,11 @@ let transformer token pos conf state weights =
                     (Array.sub weights.w2 (l * dim * hidden_dim) (dim * hidden_dim)) hidden_dim dim;
 
     state.x <- accum state.x state.xb; 
-    (* print_float_array state.x *)
   done;
 
   state.x <- rmsnorm state.x state.x weights.rms_final_weight;
 
   state.logits <- matmul state.logits state.x weights.wcls dim conf.vocab_size;
-
-  (* print_float_array state.logits *)
-  
-
-
 ;;
 
 
@@ -646,49 +564,18 @@ let run args =
 
   let rng_seed = int_of_float (Unix.gettimeofday()) in
   Random.init rng_seed;
-  (* print_endline (string_of_int rng_seed); *)
   let file = open_in_bin checkpoint in
   let config = read_config file checkpoint in
-  (* print_config config; *)
   let stat = Unix.stat checkpoint in
   let file_size = stat.st_size in
-  (* print_endline (string_of_int file_size) *)
   let weights = create_transformer_weights () in 
   checkpoint_init_weights weights config file config.shared_weights file_size;
-  (* print_endline transformer_weights.token_embedding_table *)
-  (* print_token_embedding_table transformer_weights *)
-  (* print_endline (string_of_float transformer_weights.token_embedding_table.(0));
-  print_endline (string_of_float transformer_weights.token_embedding_table.(1));
-  print_endline (string_of_float transformer_weights.token_embedding_table.(2));
-  print_endline (string_of_float transformer_weights.token_embedding_table.(10000));
-  print_endline (string_of_float transformer_weights.token_embedding_table.(100000));
-  print_endline (string_of_float transformer_weights.freq_cis_imag.(1000)) *)
 
   let steps = if steps <= 0 || steps > config.seq_len then config.seq_len else steps in
-  (* print_endline (string_of_int steps); *)
 
   let tokenizer_file = open_in_bin "tokenizer.bin" in
   let vocab, vocab_scores, max_token_length = tokenizer_init config tokenizer_file in
   let vocab_a = Array.of_list vocab in
-  (* print_endline "filhuksdf";
-  print_endline (string_of_int max_token_length);
-  print_endline (string_of_float (List.nth vocab_scores 0));
-  print_endline (string_of_float (List.nth vocab_scores 1000));
-  print_endline (string_of_float (List.nth vocab_scores 1120));
-  print_endline (string_of_float (List.nth vocab_scores 1137));
-  print_endline (Bytes.to_string (List.nth vocab 0));
-  print_endline (Bytes.to_string (List.nth vocab 1));
-  print_endline (Bytes.to_string (List.nth vocab 2));
-  print_endline (Bytes.to_string (List.nth vocab 3));
-  print_bytes (List.nth vocab 0);
-  print_bytes (List.nth vocab 1);
-  print_bytes (List.nth vocab 2);
-  print_bytes (List.nth vocab 3); *)
-
-  (* print_endline (List.nth vocab 0); *)
-
-
-
 
   let state = {
     x = [||];
@@ -706,7 +593,6 @@ let run args =
   } in
   init_run_state state config;
 
-
   let prompt_tokens =
     if String.length prompt > 0 then
       bpe_encode prompt vocab vocab_scores
@@ -718,8 +604,6 @@ let run args =
   (* Initialize with token 1 (=BOS), as done in Llama-2 sentencepiece tokenizer *)
   let token = ref 1 in
   let pos = ref 0 in (* Position in the sequence *)
-  (* Explicitly print the initial BOS token for stylistic symmetry reasons *)
-  (* print_endline "<s>"; *)
 
   let rec get_tokens = function
     | 0 -> ()
@@ -759,38 +643,7 @@ let run args =
   let end_time = Unix.gettimeofday() in
   let time_delta = end_time -. (Option.get !start_time) in
   let achieved_toks_per_sec = (float_of_int (steps - 1)) /. time_delta in
-  Printf.printf "\nachieved tok/s: %.2f\n" achieved_toks_per_sec;
-
-  if temperature = -1. && steps == -2821 && prompt = "just to stop [unused-var] warnings" then print_endline "skfjkhg"
-  
-
-  (* print_endline checkpoint;
-  let file_name = "tokenizer.bin" in
-  try
-    let file = open_in_bin file_name in
-    print_endline (string_of_int (input_binary_int file));
-    print_endline (string_of_int (input_binary_int file));
-    print_endline (string_of_int (input_binary_int file));
-    print_endline (string_of_bool (not (input_binary_int file = 0)));
-    if not (input_binary_int file = 0) then begin
-      close_in file;
-      print_endline "Couldn't load tokenizer.bin";
-      exit 1
-    end;
-
-    let vocab, vocab_scores, max_token_length = tokenizer_init config file in
-
-    (* Use vocab, vocab_scores, and max_token_length as needed *)
-
-    close_in file;
-  with
-  | Sys_error msg ->
-    print_endline ("Error: " ^ msg);
-    exit 1
-;; *)
-
-
-
+  Printf.printf "\nachieved tok/s: %.2f\n" achieved_toks_per_sec
 
 let () =
   let args =
