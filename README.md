@@ -3,6 +3,8 @@
 
 Llama2 inference in one file of pure OCaml.
 
+Based on [Andrej Karpathy](https://karpathy.ai/)'s [llama2.c](https://github.com/karpathy/llama2.c).
+
 
 ## Run
 
