@@ -68,12 +68,11 @@ let read_config file checkpoint =
   let config_header = Bytes.create size in
   try
     let read_bytes = input file config_header 0 size in
-    (* close_in file; *)
     if read_bytes <> size then begin
       Printf.printf "Couldn't read config header from file %s\n" checkpoint;
       exit 1
     end;
-    print_bytes config_header;
+    (* print_bytes config_header; *)
 
     let dim = get_int32_le config_header 0 in
     let hidden_dim = get_int32_le config_header 4 in
@@ -645,12 +644,12 @@ let run args =
   let prompt = args.prompt in
 
 
-  let rng_seed = int_of_float (Unix.time ()) in
+  let rng_seed = int_of_float (Unix.gettimeofday()) in
   Random.init rng_seed;
-  print_endline (string_of_int rng_seed);
+  (* print_endline (string_of_int rng_seed); *)
   let file = open_in_bin checkpoint in
   let config = read_config file checkpoint in
-  print_config config;
+  (* print_config config; *)
   let stat = Unix.stat checkpoint in
   let file_size = stat.st_size in
   (* print_endline (string_of_int file_size) *)
@@ -714,13 +713,13 @@ let run args =
     else
       [] in
   (* Start the main loop *)
-  let start = ref 0 in  (* Used to time our code, only initialized after the first iteration *)
+  let start_time = ref None in  (* Used to time our code, only initialized after the first iteration *)
   let next_token = ref 0 in (* Will store the next token in the sequence *)
   (* Initialize with token 1 (=BOS), as done in Llama-2 sentencepiece tokenizer *)
   let token = ref 1 in
   let pos = ref 0 in (* Position in the sequence *)
   (* Explicitly print the initial BOS token for stylistic symmetry reasons *)
-  print_endline "<s>";
+  (* print_endline "<s>"; *)
 
   let rec get_tokens = function
     | 0 -> ()
@@ -753,8 +752,14 @@ let run args =
 
       token := !next_token;
       pos := !pos + 1;
+      if !start_time = None then start_time := Some (Unix.gettimeofday()) else ();
       get_tokens (n - 1); in
   get_tokens steps;
+
+  let end_time = Unix.gettimeofday() in
+  let time_delta = end_time -. (Option.get !start_time) in
+  let achieved_toks_per_sec = (float_of_int (steps - 1)) /. time_delta in
+  Printf.printf "\nachieved tok/s: %.2f\n" achieved_toks_per_sec;
 
   if temperature = -1. && steps == -2821 && prompt = "just to stop [unused-var] warnings" then print_endline "skfjkhg"
   
