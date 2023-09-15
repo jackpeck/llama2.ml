@@ -252,13 +252,232 @@ let tokenizer_init conf file =
     (* let bstr = Bytes.to_string (Bytes.create(5)) in *)
     let bstr = Bytes.create len in
     really_input file bstr 0 len;
-    vocab := bstr :: !vocab;
+    vocab := (Bytes.to_string bstr) :: !vocab;
   done;
 
   (List.rev !vocab, List.rev !vocab_scores, !max_token_length)
 ;;
 
+
+type run_state = {
+  mutable x : int list;
+  mutable xb : int list;
+  mutable q : int list;
+  mutable k : int list;
+  mutable v : int list;
+  mutable att : int list;
+  mutable key_cache : int list;
+  mutable value_cache : int list;
+  mutable xb2 : int list;
+  mutable hb : int list;
+  mutable hb2 : int list;
+  mutable logits : int list;
+}
+
+let init_run_state state config =
+  state.x <- List.init config.dim (fun _ -> 0);
+  state.xb <- List.init config.dim (fun _ -> 0);
+  state.xb2 <- List.init config.dim (fun _ -> 0);
+  state.hb <- List.init config.hidden_dim (fun _ -> 0);
+  state.hb2 <- List.init config.hidden_dim (fun _ -> 0);
+  state.q <- List.init config.dim (fun _ -> 0);
+  state.k <- List.init config.dim (fun _ -> 0);
+  state.v <- List.init config.dim (fun _ -> 0);
+  state.att <- List.init (config.n_heads * config.seq_len) (fun _ -> 0);
+  state.logits <- List.init config.vocab_size (fun _ -> 0);
+  state.key_cache <- List.init (config.n_layers * config.seq_len * config.dim) (fun _ -> 0);
+  state.value_cache <- List.init (config.n_layers * config.seq_len * config.dim) (fun _ -> 0)
+;;
   
+
+let rec print_int_list = function
+  | [] -> print_endline "";
+  | x::xs -> print_int x;
+    if xs <> [] then print_string ", ";
+    print_int_list xs
+
+let rec take n lst =
+  match n, lst with
+  | 0, _ | _, [] -> []
+  | n, x :: xs -> x :: take (n - 1) xs
+
+let rec drop n lst =
+  match n, lst with
+  | 0, _ | _, [] -> lst
+  | n, _ :: xs -> drop (n - 1) xs
+
+let bpe_encode text vocab vocab_scores =
+  let tokens = ref [] in
+
+  let rec index_opt elem lst =
+    let rec loop idx = function
+      | [] -> None
+      | x :: xs -> if x = elem then Some idx else loop (idx + 1) xs
+    in
+    loop 0 lst
+  in
+
+  (* Helper function to look up a string in the vocab *)
+  let str_lookup str vocab =
+    match index_opt str vocab with
+    | Some id -> id
+    | None -> -1
+  in
+
+  (* Encode individual characters in the input text *)
+  String.iteri (fun i -> fun char ->
+    let string = String.make 1 char in
+    let id = str_lookup string vocab in
+    if id = -1 then begin
+      Printf.printf "not a good prompt at pos %d\n" i;
+      exit 1
+    end;
+    tokens := id :: !tokens
+  ) text;
+
+  (* print_endline (string_of_int (List.hd !tokens)); *)
+
+  tokens := List.rev !tokens;
+
+  print_int_list !tokens;
+
+  (* !tokens *)
+
+  let vocab_a = Array.of_list vocab in
+  let vocab_scores_a = Array.of_list vocab_scores in
+
+  (* let merge_tokens tokens vocab vocab_scores =
+    print_endline "a";
+    []
+    (* let rec find_best_pair best_score best_id best_idx i =
+      if i + 1>= List.length tokens then best_id, best_idx
+      else
+        let token1 = List.nth tokens i in
+        let token2 = List.nth tokens (i + 1) in
+        let string = vocab_a.(token1) ^ vocab_a.(token2) in
+        let id = str_lookup string vocab in 
+        print_endline id; *)
+      (* if i < List.length tokens - 1 then begin
+        let token1 = List.nth tokens i in
+        let token2 = List.nth tokens (i + 1) in
+        let string = vocab_a.(token1) ^ vocab_a.(token2) in
+        let id = str_lookup string vocab in
+        if id <> -1 && vocab_scores_a.(id) > best_score then
+          find_best_pair vocab_scores_a.(id) id i (i + 1)
+        else
+          find_best_pair best_score best_id best_idx (i + 1)
+      end else
+        (best_score, best_id, best_idx)
+    in *)
+
+    let tokens2 = merge_tokens !tokens vocab vocab_a in
+    print_int_list tokens2;
+    !tokens *)
+
+  (* let foo q = q in
+  foo (); *)
+
+  (* let merge_tokens tokens vocab vocab_scores = [] in *)
+  let merge_tokens tokens vocab vocab_scores =
+    let rec find_best_pair tokens best_score best_id best_index i = match tokens with
+      (* | token1::token2::ts -> 1,2 *)
+      | token1::token2::ts -> 
+        let string = vocab_a.(token1) ^ vocab_a.(token2) in
+        let id = str_lookup string vocab in
+        let best_score, best_id, best_index =
+          if id = -1 then best_score, best_id, best_index
+          else let score = vocab_scores_a.(id) in 
+            if score < best_score then best_score, best_id, best_index
+            else score, id, i
+        in
+        find_best_pair (token2::ts) best_score best_id best_index (i+1)
+
+      | token::[] -> best_id, best_index
+      | [] -> best_id, best_index
+    in
+      (* [] *)
+      let best_id, best_index = (find_best_pair tokens (-1e10) 3 4 0) in
+      [best_id; best_index]
+
+  in
+  let t2 = merge_tokens !tokens vocab vocab_scores in
+  print_int_list t2;
+  !tokens
+
+
+  (* !tokens *)
+(* 
+  let vocab_a = Array.of_list vocab in
+  let vocab_scores_a = Array.of_list vocab_scores in
+
+  let merge_tokens tokens vocab vocab_scores =
+    let rec find_best_pair best_score best_id best_idx i =
+      if i < List.length tokens - 1 then begin
+        let token1 = List.nth tokens i in
+        let token2 = List.nth tokens (i + 1) in
+        let string = vocab_a.(token1) ^ vocab_a.(token2) in
+        let id = str_lookup string vocab in
+        if id <> -1 && vocab_scores_a.(id) > best_score then
+          find_best_pair vocab_scores_a.(id) id i (i + 1)
+        else
+          find_best_pair best_score best_id best_idx (i + 1)
+      end else
+        (best_score, best_id, best_idx)
+    in
+  
+    let rec merge_pairs tokens =
+      match find_best_pair (-1e10) (-1) (-1) 0 with
+      | (best_score, best_id, best_idx) when best_idx = -1 ->
+          tokens
+      | (_, best_id, best_idx) ->
+          let new_tokens = take (best_idx + 1) tokens @ [best_id] @ drop (best_idx + 2) tokens in
+          merge_pairs new_tokens
+    in
+  
+    merge_pairs tokens
+  in
+  tokens := merge_tokens !tokens vocab vocab_scores;
+  print_int_list !tokens;
+  !tokens *)
+  
+
+  
+
+  (* Merge consecutive pairs according to scores in vocab_scores
+  let rec merge_pairs () =
+    let best_score = ref (-1e10) in
+    let best_id = ref (-1) in
+    let best_idx = ref (-1) in
+
+    for i = 0 to List.length !tokens - 2 do
+      let string = vocab.(List.nth !tokens i) ^ vocab.(List.nth !tokens (i + 1)) in
+      let id = str_lookup string vocab in
+      if id <> -1 && vocab_scores.(id) > !best_score then begin
+        best_score := vocab_scores.(id);
+        best_id := id;
+        best_idx := i
+      end
+    done;
+
+    if !best_idx = -1 then
+      ()
+    else
+      (* Merge the consecutive pair into new token *)
+      (* List.nth !tokens !best_idx <- !best_id; *)
+
+      (* Delete token at position best_idx+1, shift the entire sequence back 1 *)
+      (* tokens := List.take !best_idx !tokens @ List.drop (best_idx + 2) !tokens; *)
+      tokens := List.take (!best_idx - 1) !tokens @ (!best_id :: (List.drop (best_idx + 2) !tokens));
+
+      merge_pairs ()
+  in
+
+  merge_pairs ();
+  List.rev !tokens *)
+;;
+
+
+
 
 let run args =
   let checkpoint = args.checkpoint in
@@ -292,10 +511,12 @@ let run args =
 
   let tokenizer_file = open_in_bin "tokenizer.bin" in
   let vocab, vocab_scores, max_token_length = tokenizer_init config tokenizer_file in
-  print_endline "filhuksdf";
+  (* print_endline "filhuksdf";
   print_endline (string_of_int max_token_length);
   print_endline (string_of_float (List.nth vocab_scores 0));
-  (* print_endline (string_of_float (List.nth vocab_scores 1000)); *)
+  print_endline (string_of_float (List.nth vocab_scores 1000));
+  print_endline (string_of_float (List.nth vocab_scores 1120));
+  print_endline (string_of_float (List.nth vocab_scores 1137));
   print_endline (Bytes.to_string (List.nth vocab 0));
   print_endline (Bytes.to_string (List.nth vocab 1));
   print_endline (Bytes.to_string (List.nth vocab 2));
@@ -303,7 +524,37 @@ let run args =
   print_bytes (List.nth vocab 0);
   print_bytes (List.nth vocab 1);
   print_bytes (List.nth vocab 2);
-  print_bytes (List.nth vocab 3);
+  print_bytes (List.nth vocab 3); *)
+
+  (* print_endline (List.nth vocab 0); *)
+
+
+
+
+  let state = {
+    x = [];
+    xb = [];
+    q = [];
+    k = [];
+    v = [];
+    att = [];
+    key_cache = [];
+    value_cache = [];
+    xb2 = [];
+    hb = [];
+    hb2 = [];
+    logits = [];
+  } in
+  init_run_state state config;
+
+
+  let prompt_tokens =
+    if String.length prompt > 0 then
+      bpe_encode prompt vocab vocab_scores
+    else
+      []
+    in prompt_tokens;
+
 
 
 
