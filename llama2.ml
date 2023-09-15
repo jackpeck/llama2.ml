@@ -449,7 +449,6 @@ let accum a b =
 
 
 let transformer token pos conf state weights =
-  let x = state.x in
   let dim = conf.dim in
   let hidden_dim = conf.hidden_dim in
   let head_size = dim / conf.n_heads in
@@ -457,7 +456,7 @@ let transformer token pos conf state weights =
 
   (* Copy the token embedding into x *)
   let content_row = Array.sub weights.token_embedding_table (token * dim) dim in
-  Array.blit content_row 0 x 0 dim;
+  Array.blit content_row 0 state.x 0 dim;
 
   (* print_float content_row.((token * dim) - 1); *)
   (* print_float 0.; *)
@@ -482,7 +481,7 @@ let transformer token pos conf state weights =
   (* for l = 0 to (conf.n_layers - 1) do *)
     for l = 0 to 0 do
     (* Attention rmsnorm *)
-    state.xb <- rmsnorm state.xb x (Array.sub weights.rms_att_weight (l * dim) (dim));
+    state.xb <- rmsnorm state.xb state.x (Array.sub weights.rms_att_weight (l * dim) (dim));
     (* print_float_array state.xb; *)
 
 
@@ -600,11 +599,11 @@ let transformer token pos conf state weights =
 
     (* print_float_array state.xb2 *)
 
-    let x = accum x state.xb2 in
+    state.x <- accum state.x state.xb2;
 
     (* print_float_array x; *)
 
-    state.xb <- rmsnorm state.xb x
+    state.xb <- rmsnorm state.xb state.x
                      (Array.sub weights.rms_ffn_weight (l * dim) dim);
 
     (* print_float_array state.xb *)
@@ -634,8 +633,8 @@ let transformer token pos conf state weights =
 
     (* print_float_array state.xb *)
 
-    let x = accum x state.xb in 
-    print_float_array x
+    state.x <- accum state.x state.xb; 
+    print_float_array state.x
     
 
 
