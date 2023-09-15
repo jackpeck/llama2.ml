@@ -389,11 +389,8 @@ let bpe_encode text vocab vocab_scores =
       if best_id = -1
         then tokens
         else merge_tokens ((take best_index tokens) @ (best_id :: drop (best_index + 2) tokens)) vocab vocab_scores
-
   in
-  let t2 = merge_tokens !tokens vocab vocab_scores in
-  print_int_list t2;
-  !tokens
+  merge_tokens !tokens vocab vocab_scores
 ;;
 
 
@@ -725,30 +722,25 @@ let run args =
   (* Explicitly print the initial BOS token for stylistic symmetry reasons *)
   print_endline "<s>";
 
-  (* transformer token pos config state weights; *)
-
   let rec get_tokens = function
     | 0 -> ()
     | n -> 
       transformer !token !pos config state weights;
-
+      let () =
       if !pos < List.length prompt_tokens then
         next_token := List.nth prompt_tokens !pos
       else
-        let () =
-          if temperature = 0.0 then
-            next_token := argmax state.logits
-          else
-            let () =
-              for i = 0 to Array.length state.logits - 1 do
-                state.logits.(i) <- state.logits.(i) /. temperature;
-              done;
-            in
-            let softmaxed_logits = softmax state.logits config.vocab_size in
-            next_token := sample softmaxed_logits
-        in
-        ();
-
+        if temperature = 0.0 then
+          next_token := argmax state.logits
+        else
+          let () =
+            for i = 0 to Array.length state.logits - 1 do
+              state.logits.(i) <- state.logits.(i) /. temperature;
+            done;
+          in
+          let softmaxed_logits = softmax state.logits config.vocab_size in
+          next_token := sample softmaxed_logits
+      in
       (* Following BOS token (1), sentencepiece decoder strips any leading whitespace *)
       let token_str =
         if !token = 1 && vocab_a.(!next_token).[0] = ' ' then
@@ -761,8 +753,7 @@ let run args =
 
       token := !next_token;
       pos := !pos + 1;
-
-      get_tokens (n - 1) in
+      get_tokens (n - 1); in
   get_tokens steps;
 
   if temperature = -1. && steps == -2821 && prompt = "just to stop [unused-var] warnings" then print_endline "skfjkhg"
