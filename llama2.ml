@@ -482,14 +482,10 @@ let transformer token pos conf state weights =
     (* for l = 0 to 0 do *)
     (* Attention rmsnorm *)
     state.xb <- rmsnorm state.xb state.x (Array.sub weights.rms_att_weight (l * dim) (dim));
-    (* print_float_array state.xb; *)
-
 
     (* QKV matmuls for this position *)
     state.q <- matmul state.q state.xb
                       (Array.sub weights.wq (l * dim * dim) (dim * dim)) dim dim;
-
-    (* print_float_array state.q; *)
 
     state.k <- matmul state.k state.xb
                       (Array.sub weights.wk (l * dim * dim) (dim * dim)) dim dim;
@@ -497,15 +493,11 @@ let transformer token pos conf state weights =
     state.v <- matmul state.v state.xb
                       (Array.sub weights.wv (l * dim * dim) (dim * dim)) dim dim;
 
-    (* print_float_array state.k; *)
-
     (* Apply RoPE rotation to the q and k vectors for each head *)
     for h = 0 to (conf.n_heads - 1) do
       (* Get the q and k vectors for this head *)
       let q = Array.sub state.q (h * head_size) head_size in
       let k = Array.sub state.k (h * head_size) head_size in
-
-      (* print_float_array k *)
 
       let rotate_qk freq_cis_real_row freq_cis_imag_row q k head_size =
         let rec rotate i =
@@ -530,10 +522,6 @@ let transformer token pos conf state weights =
         state.q.(h * head_size + i) <- q.(i);
         state.k.(h * head_size + i) <- k.(i);
       done;
-
-
-      (* print_float_array k *)
-
     done;
 
     (* Save key and value at this time step (pos) to our kv cache *)
@@ -542,8 +530,6 @@ let transformer token pos conf state weights =
     Array.blit state.k 0 state.key_cache offset dim;
     Array.blit state.v 0 state.value_cache offset dim;
 
-    (* print_float_array state.key_cache; *)
-
     (* Multihead attention. Iterate over all heads *)
     for h = 0 to (conf.n_heads - 1) do
       (* Get the query vector for this head *)
@@ -551,8 +537,6 @@ let transformer token pos conf state weights =
 
       (* Attention scores for this head *)
       let att = Array.sub state.att (h * conf.seq_len) conf.seq_len in
-
-      (* print_float_array att *)
 
       (* Iterate over all timesteps, including the current one *)
       for t = 0 to pos do
@@ -568,17 +552,11 @@ let transformer token pos conf state weights =
         att.(t) <- score;
       done;
 
-      (* print_float_array att; *)
-
       let att = softmax att (pos + 1) in
-      (* print_string "att softmaxed"; *)
-      (* print_float_array att; *)
 
       let xb_ptr = h * head_size in
       let zero_head_size = Array.make head_size 0. in
       Array.blit zero_head_size 0 state.xb xb_ptr head_size;
-
-      (* print_float_array state.xb *)
 
       for t = pos downto 0 do
         (* Get the value vector for this head and at this timestep *)
@@ -590,48 +568,31 @@ let transformer token pos conf state weights =
           state.xb.(xb_ptr + i) <- state.xb.(xb_ptr + i) +. a *. v.(i);
         done;
       done;
-
-      (* print_float_array state.xb *)
     done;
 
     state.xb2 <- matmul state.xb2 state.xb
                   (Array.sub weights.wo (l * dim * dim) (dim * dim)) dim dim;
 
-    (* print_float_array state.xb2 *)
-
     state.x <- accum state.x state.xb2;
-
-    (* print_float_array x; *)
 
     state.xb <- rmsnorm state.xb state.x
                      (Array.sub weights.rms_ffn_weight (l * dim) dim);
 
-    (* print_float_array state.xb *)
-
     state.hb <- matmul state.hb state.xb
                      (Array.sub weights.w1 (l * dim * hidden_dim) (dim * hidden_dim)) dim hidden_dim;
 
-    (* print_float_array state.hb *)
 
     state.hb2 <- matmul state.hb2 state.xb
                       (Array.sub weights.w3 (l * dim * hidden_dim) (dim * hidden_dim)) dim hidden_dim;
-
-    (* print_float_array state.hb2 *)
 
     state.hb <- Array.init hidden_dim (fun i ->
       state.hb.(i) *. (1.0 /. (1.0 +. exp (-. state.hb.(i))))
     );
 
-    (* print_float_array state.hb *)
-
     state.hb <- Array.init hidden_dim (fun i -> state.hb.(i) *. state.hb2.(i));
-
-    (* print_float_array state.hb *)
 
     state.xb <- matmul state.xb state.hb
                     (Array.sub weights.w2 (l * dim * hidden_dim) (dim * hidden_dim)) hidden_dim dim;
-
-    (* print_float_array state.xb *)
 
     state.x <- accum state.x state.xb; 
     (* print_float_array state.x *)
