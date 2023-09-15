@@ -609,6 +609,29 @@ let transformer token pos conf state weights =
 ;;
 
 
+let argmax v =
+  let rec find_max i max_i max_p =
+    if i = Array.length v then max_i
+    else
+      let new_max_i, new_max_p =
+        if v.(i) > max_p then i, v.(i)
+        else max_i, max_p
+      in
+      find_max (i + 1) new_max_i new_max_p
+  in
+  find_max 1 0 v.(0)
+
+let sample probabilities =
+  let n = Array.length probabilities in
+  let rec sample_index cdf i r =
+    if i = n then n - 1 (* In case of rounding errors *)
+    else if (cdf +. probabilities.(i)) >= r then i
+    else sample_index (cdf +. probabilities.(i)) (i + 1) r
+  in
+  let r = Random.float 1.0 in
+  sample_index 0.0 0 r
+  
+
 
 
 let run args =
@@ -643,6 +666,7 @@ let run args =
 
   let tokenizer_file = open_in_bin "tokenizer.bin" in
   let vocab, vocab_scores, max_token_length = tokenizer_init config tokenizer_file in
+  let vocab_a = Array.of_list vocab in
   (* print_endline "filhuksdf";
   print_endline (string_of_int max_token_length);
   print_endline (string_of_float (List.nth vocab_scores 0));
@@ -705,21 +729,26 @@ let run args =
     next_token := List.nth prompt_tokens !pos
   else
     let () =
-      print_endline (string_of_float state.logits.(0))
+      (* print_endline (string_of_float state.logits.(0)) *)
       (* print_endline "q" *)
-      (* if temperature = 0.0 then
+      (* next_token := argmax state.logits;
+      print_endline "next_token:";
+      print_int !next_token *)
+
+      if temperature = 0.0 then
         next_token := argmax state.logits
       else
         let () =
-          let factor = 1.0 /. temperature in
           for i = 0 to Array.length state.logits - 1 do
-            state.logits.(i) <- state.logits.(i) *. factor;
+            state.logits.(i) <- state.logits.(i) /. temperature;
           done;
         in
-        softmax state.logits config.vocab_size;
-        next_token := sample state.logits *)
+        let softmaxed_logits = softmax state.logits config.vocab_size in
+        next_token := sample softmaxed_logits
     in
     ();
+    print_int !next_token;
+    print_string (vocab_a.(!next_token));
 
 
 
