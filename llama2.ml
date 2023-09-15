@@ -631,8 +631,22 @@ let sample probabilities =
   let r = Random.float 1.0 in
   sample_index 0.0 0 r
   
-
-
+let trim_left s =
+  let is_whitespace c =
+    c = ' ' || c = '\x0C' || c = '\n' || c = '\r' || c = '\t'
+  in
+  let len = String.length s in
+  let rec find_first_non_whitespace i =
+    if i < len && is_whitespace s.[i] then
+      find_first_non_whitespace (i + 1)
+    else
+      i
+  in
+  let start = find_first_non_whitespace 0 in
+  if start = len then
+    ""
+  else
+    String.sub s start (len - start)
 
 let run args =
   let checkpoint = args.checkpoint in
@@ -741,10 +755,15 @@ let run args =
         next_token := sample softmaxed_logits
     in
     ();
-    print_int !next_token;
-    print_string (vocab_a.(!next_token));
 
-
+  (* Following BOS token (1), sentencepiece decoder strips any leading whitespace *)
+  let token_str =
+    if !token = 1 && vocab_a.(!next_token).[0] = ' ' then
+      trim_left vocab_a.(!next_token)
+    else
+      vocab_a.(!next_token)
+  in
+    print_string token_str;
 
   if temperature = -1. && steps == -2821 && prompt = "just to stop [unused-var] warnings" then print_endline "skfjkhg"
   
