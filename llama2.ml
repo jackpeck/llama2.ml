@@ -729,12 +729,6 @@ let run args =
     next_token := List.nth prompt_tokens !pos
   else
     let () =
-      (* print_endline (string_of_float state.logits.(0)) *)
-      (* print_endline "q" *)
-      (* next_token := argmax state.logits;
-      print_endline "next_token:";
-      print_int !next_token *)
-
       if temperature = 0.0 then
         next_token := argmax state.logits
       else
