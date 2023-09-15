@@ -452,7 +452,6 @@ let transformer token pos conf state weights =
   let dim = conf.dim in
   let hidden_dim = conf.hidden_dim in
   let head_size = dim / conf.n_heads in
-  print_endline "transformer";
 
   (* Copy the token embedding into x *)
   let content_row = Array.sub weights.token_embedding_table (token * dim) dim in
@@ -472,14 +471,8 @@ let transformer token pos conf state weights =
               (pos * (head_size / 2))
               (head_size / 2) in
 
-  (* print_float freq_cis_real_row.(10); *)
-  print_float_array freq_cis_real_row;
-  print_float_array freq_cis_imag_row;
-  (* print_float_array content_row; *)
-
   (* Forward all the layers *)
   for l = 0 to (conf.n_layers - 1) do
-    (* for l = 0 to 0 do *)
     (* Attention rmsnorm *)
     state.xb <- rmsnorm state.xb state.x (Array.sub weights.rms_att_weight (l * dim) (dim));
 
@@ -722,9 +715,7 @@ let run args =
     if String.length prompt > 0 then
       bpe_encode prompt vocab vocab_scores
     else
-      []
-    in prompt_tokens;
-
+      [] in
   (* Start the main loop *)
   let start = ref 0 in  (* Used to time our code, only initialized after the first iteration *)
   let next_token = ref 0 in (* Will store the next token in the sequence *)
@@ -740,7 +731,6 @@ let run args =
     | 0 -> ()
     | n -> 
       transformer !token !pos config state weights;
-      print_int !pos;
 
       if !pos < List.length prompt_tokens then
         next_token := List.nth prompt_tokens !pos
@@ -767,6 +757,7 @@ let run args =
           vocab_a.(!next_token)
       in
         print_string token_str;
+        flush stdout;
 
       token := !next_token;
       pos := !pos + 1;
