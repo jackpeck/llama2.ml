@@ -280,7 +280,7 @@ let bpe_encode text vocab vocab_scores =
   in
 
   (* Encode individual characters in the input text *)
-  let _, tokens_rev =
+  let tokens =
     (String.fold_left (fun (i, tokens) char ->
       let string = String.make 1 char in
       let id = str_lookup string vocab in
@@ -289,8 +289,8 @@ let bpe_encode text vocab vocab_scores =
         exit 1;
       end;
       (i + 1), id :: tokens
-    ) (0, []) text) in
-  let tokens = List.rev tokens_rev in
+    ) (0, []) text)
+  |> fun (_, tokens_rev) -> List.rev tokens_rev in
 
   let vocab_a = Array.of_list vocab in
   let vocab_scores_a = Array.of_list vocab_scores in
