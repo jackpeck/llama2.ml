@@ -264,8 +264,6 @@ let rec drop n lst =
   | n, _ :: xs -> drop (n - 1) xs
 
 let bpe_encode text vocab vocab_scores =
-  let tokens = ref [] in
-
   let rec index_opt elem lst =
     let rec loop idx = function
       | [] -> None
@@ -281,18 +279,17 @@ let bpe_encode text vocab vocab_scores =
     | None -> -1
   in
 
+  let tokens =
   (* Encode individual characters in the input text *)
-  String.iteri (fun i -> fun char ->
+  (List.mapi (fun i -> fun char ->
     let string = String.make 1 char in
     let id = str_lookup string vocab in
     if id = -1 then begin
       Printf.printf "not a good prompt at pos %d\n" i;
       exit 1
     end;
-    tokens := id :: !tokens
-  ) text;
-
-  tokens := List.rev !tokens;
+    id
+  ) (text |> String.to_seq |> List.of_seq)) in
 
   let vocab_a = Array.of_list vocab in
   let vocab_scores_a = Array.of_list vocab_scores in
@@ -314,9 +311,9 @@ let bpe_encode text vocab vocab_scores =
       let best_id, best_index = (find_best_pair tokens (-1e10) (-1) 0 0) in
       if best_id = -1
         then tokens
-        else merge_tokens ((take best_index tokens) @ (best_id :: drop (best_index + 2) tokens)) vocab vocab_scores
+      else merge_tokens ((take best_index tokens) @ (best_id :: drop (best_index + 2) tokens)) vocab vocab_scores
   in
-  merge_tokens !tokens vocab vocab_scores
+  merge_tokens tokens vocab vocab_scores
 ;;
 
 
