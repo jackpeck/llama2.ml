@@ -279,17 +279,17 @@ let bpe_encode text vocab vocab_scores =
     | None -> -1
   in
 
-  let tokens =
   (* Encode individual characters in the input text *)
-  (List.mapi (fun i -> fun char ->
-    let string = String.make 1 char in
-    let id = str_lookup string vocab in
-    if id = -1 then begin
-      Printf.printf "not a good prompt at pos %d\n" i;
-      exit 1
-    end;
-    id
-  ) (text |> String.to_seq |> List.of_seq)) in
+  let _, tokens =
+    String.fold_right (fun char (i, tokens) ->
+      let string = String.make 1 char in
+      let id = str_lookup string vocab in
+      if id = -1 then begin
+        Printf.printf "not a good prompt at pos %d\n" i;
+        exit 1;
+      end;
+      (i-1), id :: tokens
+    ) text ((String.length text) - 1, []) in
 
   let vocab_a = Array.of_list vocab in
   let vocab_scores_a = Array.of_list vocab_scores in
