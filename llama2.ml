@@ -309,9 +309,7 @@ let bpe_encode text vocab vocab_scores =
             else score, id, i
         in
         find_best_pair (token2::ts) best_score best_id best_index (i+1)
-
-      | token::[] -> best_id, best_index
-      | [] -> best_id, best_index
+      | _ -> best_id, best_index
     in
       let best_id, best_index = (find_best_pair tokens (-1e10) (-1) 0 0) in
       if best_id = -1
